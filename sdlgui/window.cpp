@@ -12,7 +12,11 @@
 #include <sdlgui/theme.h>
 #include <sdlgui/screen.h>
 #include <sdlgui/layout.h>
+#if defined(_WIN32)
 #include <SDL.h>
+#else
+#include <SDL2/SDL.h>
+#endif
 #include <thread>
 
 #include "nanovg.h"
@@ -30,7 +34,8 @@ struct Window::AsyncTexture
 
   bool ready() const { return tex.tex != nullptr; }
 
-  AsyncTexture(int _id) : id(_id) {};
+  AsyncTexture(int _id)
+    : id(_id){};
 
   void load(Window* ptr, int dx, int dy, bool mouseFocus)
   {
@@ -45,9 +50,9 @@ struct Window::AsyncTexture
 
       Vector2i mPos(dx + ds, dy + ds);
 
-      int realw = ww + 2 * ds + dx; //with + 2*shadow + offset
+      int realw = ww + 2 * ds + dx; // with + 2*shadow + offset
       int realh = hh + 2 * ds + dy;
-      NVGcontext *ctx = nvgCreateRT(NVG_DEBUG, realw, realh, 0);
+      NVGcontext* ctx = nvgCreateRT(NVG_DEBUG, realw, realh, 0);
 
       float pxRatio = 1.0f;
       nvgBeginFrame(ctx, realw, realh, pxRatio);
@@ -60,16 +65,12 @@ struct Window::AsyncTexture
       nvgBeginPath(ctx);
       nvgRoundedRect(ctx, mPos.x, mPos.y, ww, hh, cr);
 
-      nvgFillColor(ctx, (mouseFocus ? mTheme->mWindowFillFocused
-                                    : mTheme->mWindowFillUnfocused).toNvgColor());
+      nvgFillColor(ctx, (mouseFocus ? mTheme->mWindowFillFocused : mTheme->mWindowFillUnfocused).toNvgColor());
       nvgFill(ctx);
 
 
       /* Draw a drop shadow */
-      NVGpaint shadowPaint = nvgBoxGradient(
-        ctx, mPos.x, mPos.y, ww, hh, cr * 2, ds * 2,
-        mTheme->mDropShadow.toNvgColor(), 
-        mTheme->mTransparent.toNvgColor());
+      NVGpaint shadowPaint = nvgBoxGradient(ctx, mPos.x, mPos.y, ww, hh, cr * 2, ds * 2, mTheme->mDropShadow.toNvgColor(), mTheme->mTransparent.toNvgColor());
 
       nvgSave(ctx);
       nvgResetScissor(ctx);
@@ -83,10 +84,7 @@ struct Window::AsyncTexture
 
       /* Draw header */
       NVGpaint headerPaint = nvgLinearGradient(
-        ctx, mPos.x, mPos.y, mPos.x,
-        mPos.y + headerH,
-        mTheme->mWindowHeaderGradientTop.toNvgColor(),
-        mTheme->mWindowHeaderGradientBot.toNvgColor());
+          ctx, mPos.x, mPos.y, mPos.x, mPos.y + headerH, mTheme->mWindowHeaderGradientTop.toNvgColor(), mTheme->mWindowHeaderGradientBot.toNvgColor());
 
       nvgBeginPath(ctx);
       nvgRoundedRect(ctx, mPos.x, mPos.y, ww, headerH, cr);
@@ -111,7 +109,7 @@ struct Window::AsyncTexture
 
       nvgEndFrame(ctx);
 
-      self->tex.rrect = { 0, 0, realw, realh };
+      self->tex.rrect = {0, 0, realw, realh};
       self->ctx = ctx;
     });
 
@@ -123,13 +121,13 @@ struct Window::AsyncTexture
     if (!ctx)
       return;
 
-    unsigned char *rgba = nvgReadPixelsRT(ctx);
+    unsigned char* rgba = nvgReadPixelsRT(ctx);
 
     tex.tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, SDL_TEXTUREACCESS_STREAMING, tex.w(), tex.h());
 
     int pitch;
-    uint8_t *pixels;
-    int ok = SDL_LockTexture(tex.tex, nullptr, (void **)&pixels, &pitch);
+    uint8_t* pixels;
+    int ok = SDL_LockTexture(tex.tex, nullptr, (void**)&pixels, &pitch);
     memcpy(pixels, rgba, sizeof(uint32_t) * tex.w() * tex.h());
     SDL_SetTextureBlendMode(tex.tex, SDL_BLENDMODE_BLEND);
     SDL_UnlockTexture(tex.tex);
@@ -137,59 +135,62 @@ struct Window::AsyncTexture
     nvgDeleteRT(ctx);
     ctx = nullptr;
   }
-
 };
 
-Window::Window(Widget *parent, const std::string &title)
-    : Widget(parent), mTitle(title), mButtonPanel(nullptr), mModal(false), mDrag(false) 
+Window::Window(Widget* parent, const std::string& title)
+  : Widget(parent)
+  , mTitle(title)
+  , mButtonPanel(nullptr)
+  , mModal(false)
+  , mDrag(false)
 {
   _titleTex.dirty = true;
 }
 
-Vector2i Window::preferredSize(SDL_Renderer *ctx) const
+Vector2i Window::preferredSize(SDL_Renderer* ctx) const
 {
-    if (mButtonPanel)
-        mButtonPanel->setVisible(false);
-    Vector2i result = Widget::preferredSize(ctx);
-    if (mButtonPanel)
-        mButtonPanel->setVisible(true);
+  if (mButtonPanel)
+    mButtonPanel->setVisible(false);
+  Vector2i result = Widget::preferredSize(ctx);
+  if (mButtonPanel)
+    mButtonPanel->setVisible(true);
 
-    int w, h;
-    const_cast<Window*>(this)->mTheme->getTextBounds("sans-bold", 18.0, mTitle.c_str(), &w, &h);
+  int w, h;
+  const_cast<Window*>(this)->mTheme->getTextBounds("sans-bold", 18.0, mTitle.c_str(), &w, &h);
 
-    return result.cmax(Vector2i(w + 20, h));
+  return result.cmax(Vector2i(w + 20, h));
 }
 
-Widget *Window::buttonPanel() 
+Widget* Window::buttonPanel()
 {
-    if (!mButtonPanel) 
-    {
-        mButtonPanel = new Widget(this);
-        mButtonPanel->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 0, 4));
-    }
-    return mButtonPanel;
+  if (!mButtonPanel)
+  {
+    mButtonPanel = new Widget(this);
+    mButtonPanel->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 0, 4));
+  }
+  return mButtonPanel;
 }
 
-void Window::performLayout(SDL_Renderer *ctx) 
+void Window::performLayout(SDL_Renderer* ctx)
 {
-    if (!mButtonPanel) 
+  if (!mButtonPanel)
+  {
+    Widget::performLayout(ctx);
+  }
+  else
+  {
+    mButtonPanel->setVisible(false);
+    Widget::performLayout(ctx);
+    for (auto w : mButtonPanel->children())
     {
-        Widget::performLayout(ctx);
-    } 
-    else 
-    {
-        mButtonPanel->setVisible(false);
-        Widget::performLayout(ctx);
-        for (auto w : mButtonPanel->children()) 
-        {
-          w->setFixedSize({ 22, 22 });
-          w->setFontSize(15);
-        }
-        mButtonPanel->setVisible(true);
-        mButtonPanel->setSize({ width(), 22 });
-        mButtonPanel->setPosition({ width() - (mButtonPanel->preferredSize(ctx).x + 5), 3 });
-        mButtonPanel->performLayout(ctx);
+      w->setFixedSize({22, 22});
+      w->setFontSize(15);
     }
+    mButtonPanel->setVisible(true);
+    mButtonPanel->setSize({width(), 22});
+    mButtonPanel->setPosition({width() - (mButtonPanel->preferredSize(ctx).x + 5), 3});
+    mButtonPanel->performLayout(ctx);
+  }
 }
 
 bool Window::focusEvent(bool focused)
@@ -205,10 +206,10 @@ void Window::drawBodyTemp(SDL_Renderer* renderer)
   int hh = mTheme->mWindowHeaderHeight;
 
   Vector2i ap = absolutePosition();
-  SDL_Rect rect{ ap.x, ap.y, mSize.x, mSize.y };
+  SDL_Rect rect{ap.x, ap.y, mSize.x, mSize.y};
 
   /* Draw a drop shadow */
-  SDL_Rect shadowRect{ ap.x - ds, ap.y - ds, mSize.x + 2 * ds, mSize.y + 2 * ds };
+  SDL_Rect shadowRect{ap.x - ds, ap.y - ds, mSize.x + 2 * ds, mSize.y + 2 * ds};
   SDL_Color shadowColor = mTheme->mDropShadow.toSdlColor();
 
   SDL_SetRenderDrawColor(renderer, shadowColor.r, shadowColor.g, shadowColor.b, 32);
@@ -219,13 +220,13 @@ void Window::drawBodyTemp(SDL_Renderer* renderer)
   SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
   SDL_RenderFillRect(renderer, &rect);
 
-  SDL_Rect wndBdRect{ ap.x - 2, ap.y - 2, width() + 4, height() + 4 };
+  SDL_Rect wndBdRect{ap.x - 2, ap.y - 2, width() + 4, height() + 4};
   SDL_Color bd = mTheme->mBorderDark.toSdlColor();
   SDL_SetRenderDrawColor(renderer, bd.r, bd.g, bd.b, bd.a);
   SDL_RenderDrawRect(renderer, &wndBdRect);
 
   SDL_Color headerColor = mTheme->mWindowHeaderGradientTop.toSdlColor();
-  SDL_Rect headerRect{ ap.x, ap.y, mSize.x, hh };
+  SDL_Rect headerRect{ap.x, ap.y, mSize.x, hh};
 
   SDL_SetRenderDrawColor(renderer, headerColor.r, headerColor.g, headerColor.b, headerColor.a);
   SDL_RenderFillRect(renderer, &headerRect);
@@ -275,64 +276,64 @@ void Window::draw(SDL_Renderer* renderer)
     mTheme->getTexAndRectUtf8(renderer, _titleTex, 0, 0, mTitle.c_str(), "sans-bold", 18, titleTextColor);
   }
 
-  if (!mTitle.empty() && _titleTex.tex) 
+  if (!mTitle.empty() && _titleTex.tex)
   {
     int headerH = mTheme->mWindowHeaderHeight;
-    SDL_RenderCopy(renderer, _titleTex, _pos + Vector2i( (mSize.x - _titleTex.w())/2, (headerH - _titleTex.h()) / 2));
+    SDL_RenderCopy(renderer, _titleTex, _pos + Vector2i((mSize.x - _titleTex.w()) / 2, (headerH - _titleTex.h()) / 2));
   }
 
   Widget::draw(renderer);
 }
 
-void Window::dispose() 
+void Window::dispose()
 {
-    Widget *widget = this;
-    while (widget->parent())
-        widget = widget->parent();
-    ((Screen *) widget)->disposeWindow(this);
+  Widget* widget = this;
+  while (widget->parent())
+    widget = widget->parent();
+  ((Screen*)widget)->disposeWindow(this);
 }
 
-void Window::center() 
+void Window::center()
 {
-    Widget *widget = this;
-    while (widget->parent())
-        widget = widget->parent();
-    ((Screen *) widget)->centerWindow(this);
+  Widget* widget = this;
+  while (widget->parent())
+    widget = widget->parent();
+  ((Screen*)widget)->centerWindow(this);
 }
 
-bool Window::mouseDragEvent(const Vector2i &, const Vector2i &rel,
-                            int button, int /* modifiers */) 
+bool Window::mouseDragEvent(const Vector2i&, const Vector2i& rel, int button, int /* modifiers */)
 {
-    if (mDrag && (button & (1 << SDL_BUTTON_LEFT)) != 0)
-    {
-        _pos += rel;
-        _pos = _pos.cmax({ 0, 0 });
-        _pos = _pos.cmin(parent()->size() - mSize);
-        return true;
-    }
-    return false;
-}
-
-bool Window::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
-{
-    if (Widget::mouseButtonEvent(p, button, down, modifiers))
-        return true;
-    if (button == SDL_BUTTON_LEFT) {
-        mDrag = down && (p.y - _pos.y) < mTheme->mWindowHeaderHeight;
-        return true;
-    }
-    return false;
-}
-
-bool Window::scrollEvent(const Vector2i &p, const Vector2f &rel)
-{
-    Widget::scrollEvent(p, rel);
+  if (mDrag && (button & (1 << SDL_BUTTON_LEFT)) != 0)
+  {
+    _pos += rel;
+    _pos = _pos.cmax({0, 0});
+    _pos = _pos.cmin(parent()->size() - mSize);
     return true;
+  }
+  return false;
 }
 
-void Window::refreshRelativePlacement() 
+bool Window::mouseButtonEvent(const Vector2i& p, int button, bool down, int modifiers)
 {
-    /* Overridden in \ref Popup */
+  if (Widget::mouseButtonEvent(p, button, down, modifiers))
+    return true;
+  if (button == SDL_BUTTON_LEFT)
+  {
+    mDrag = down && (p.y - _pos.y) < mTheme->mWindowHeaderHeight;
+    return true;
+  }
+  return false;
+}
+
+bool Window::scrollEvent(const Vector2i& p, const Vector2f& rel)
+{
+  Widget::scrollEvent(p, rel);
+  return true;
+}
+
+void Window::refreshRelativePlacement()
+{
+  /* Overridden in \ref Popup */
 }
 
 NAMESPACE_END(sdlgui)
